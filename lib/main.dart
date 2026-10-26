@@ -11,7 +11,7 @@ class AngleDrawerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Angle Drawer',
+      title: 'Angle Maker',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
@@ -43,7 +43,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   void _drawAngle() {
     final input = _controller.text.trim();
 
-    // 1. Check for empty input
     if (input.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter an angle in degrees.';
@@ -52,7 +51,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       return;
     }
 
-    // 2. Parse decimal / integer number
     final parsed = double.tryParse(input);
 
     if (parsed == null) {
@@ -63,7 +61,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       return;
     }
 
-    // 3. Validate angle range
     if (parsed < 0 || parsed > 360) {
       setState(() {
         _errorMessage = 'Please enter an angle between 0° and 360°.';
@@ -72,10 +69,31 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       return;
     }
 
-    // Input is valid
     setState(() {
       _errorMessage = null;
       _angle = parsed;
+    });
+  }
+
+  void _updateAngleFromTouch(Offset touchPosition, Size canvasSize) {
+    final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
+    final dx = touchPosition.dx - center.dx;
+    final dy = touchPosition.dy - center.dy;
+
+    // Calculate angle in radians counter-clockwise from horizontal right (+X)
+    double rad = -math.atan2(dy, dx);
+    if (rad < 0) {
+      rad += 2 * math.pi;
+    }
+
+    // Convert to degrees and round to 1 decimal place
+    double degrees = rad * (180.0 / math.pi);
+    degrees = double.parse(degrees.toStringAsFixed(1));
+
+    setState(() {
+      _angle = degrees;
+      _errorMessage = null;
+      _controller.text = _formatAngle(degrees);
     });
   }
 
@@ -92,7 +110,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Input section card
+            // Input Section Card
             Card(
               elevation: 2,
               child: Padding(
@@ -134,9 +152,28 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // Angle drawing canvas
+            // Instruction Banner
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.touch_app, size: 18, color: Colors.indigo.shade700),
+                const SizedBox(width: 6),
+                Text(
+                  'Tip: Drag the handle on the tip of the ray to change the angle!',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.indigo.shade700,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Canvas Display Card
             Expanded(
               child: Card(
                 elevation: 2,
@@ -166,9 +203,32 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                             const SizedBox(height: 8),
                             Expanded(
                               child: Center(
-                                child: CustomPaint(
-                                  size: const Size(double.infinity, double.infinity),
-                                  painter: AnglePainter(angleInDegrees: _angle!),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final canvasSize = Size(
+                                      constraints.maxWidth,
+                                      constraints.maxHeight,
+                                    );
+                                    return GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onPanStart: (details) => _updateAngleFromTouch(
+                                        details.localPosition,
+                                        canvasSize,
+                                      ),
+                                      onPanUpdate: (details) => _updateAngleFromTouch(
+                                        details.localPosition,
+                                        canvasSize,
+                                      ),
+                                      onTapDown: (details) => _updateAngleFromTouch(
+                                        details.localPosition,
+                                        canvasSize,
+                                      ),
+                                      child: CustomPaint(
+                                        size: canvasSize,
+                                        painter: AnglePainter(angleInDegrees: _angle!),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ),
@@ -187,11 +247,11 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     if (angle == angle.truncateToDouble()) {
       return angle.toInt().toString();
     }
-    return angle.toStringAsFixed(2);
+    return angle.toStringAsFixed(1);
   }
 }
 
-/// Custom Painter to draw rays, vertex point, arc, and degree label
+/// Custom Painter to draw extended rays, vertex, arc, and draggable handle
 class AnglePainter extends CustomPainter {
   final double angleInDegrees;
 
@@ -201,9 +261,10 @@ class AnglePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
 
-    // Calculate maximum ray length based on available screen space
+    // Extend rays close to the screen/canvas edge while keeping handle knob inside
+    const handleRadius = 14.0;
     final maxRadius = math.min(size.width, size.height) / 2;
-    final rayLength = maxRadius * 0.75;
+    final rayLength = math.max(10.0, maxRadius - handleRadius - 6.0);
 
     // Drawing paints
     final rayPaint = Paint()
@@ -225,10 +286,10 @@ class AnglePainter extends CustomPainter {
       ..color = Colors.indigo.shade900
       ..style = PaintingStyle.fill;
 
-    // Convert degrees to radians (Trigonometry requirement)
+    // Convert degrees to radians
     final angleInRadians = angleInDegrees * (math.pi / 180.0);
 
-    // Ray 1: Base ray pointing horizontally to the right (0°)
+    // Ray 1: Base horizontal ray to the right (0°)
     final ray1End = Offset(center.dx + rayLength, center.dy);
 
     // Ray 2: Rotated ray (-Y direction in Flutter screen coordinates)
@@ -238,13 +299,13 @@ class AnglePainter extends CustomPainter {
     );
 
     // Arc radius
-    final arcRadius = math.max(30.0, rayLength * 0.4);
+    final arcRadius = math.max(30.0, rayLength * 0.35);
     final arcRect = Rect.fromCircle(center: center, radius: arcRadius);
 
-    // Sweep angle is negative because counter-clockwise goes up (-Y) in Flutter coordinates
+    // Sweep angle
     final sweepAngle = -angleInRadians;
 
-    // Draw shaded wedge and arc for the angle
+    // Draw shaded wedge and arc
     if (angleInDegrees > 0) {
       final path = Path()
         ..moveTo(center.dx, center.dy)
@@ -255,7 +316,7 @@ class AnglePainter extends CustomPainter {
       canvas.drawArc(arcRect, 0, sweepAngle, false, arcPaint);
     }
 
-    // Draw Ray 1 & Ray 2 with arrowheads
+    // Draw Ray 1 & Ray 2
     canvas.drawLine(center, ray1End, rayPaint);
     _drawArrowHead(canvas, center, ray1End, rayPaint);
 
@@ -265,10 +326,45 @@ class AnglePainter extends CustomPainter {
     // Draw vertex point at origin
     canvas.drawCircle(center, 5.0, vertexPaint);
 
+    // Draw draggable handle at the tip of Ray 2
+    _drawDraggableHandle(canvas, ray2End, handleRadius);
+
     // Draw degree text label near the arc
     if (angleInDegrees > 0) {
       _drawAngleLabel(canvas, center, arcRadius, angleInRadians);
     }
+  }
+
+  void _drawDraggableHandle(Canvas canvas, Offset position, double radius) {
+    // Outer shadow
+    canvas.drawCircle(
+      position,
+      radius + 2.0,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+    );
+
+    // Outer ring (Indigo)
+    canvas.drawCircle(
+      position,
+      radius,
+      Paint()..color = Colors.indigo.shade800,
+    );
+
+    // Inner ring (White)
+    canvas.drawCircle(
+      position,
+      radius - 3.5,
+      Paint()..color = Colors.white,
+    );
+
+    // Core accent dot (Deep Orange)
+    canvas.drawCircle(
+      position,
+      4.5,
+      Paint()..color = Colors.deepOrange,
+    );
   }
 
   void _drawArrowHead(Canvas canvas, Offset start, Offset end, Paint paint) {
