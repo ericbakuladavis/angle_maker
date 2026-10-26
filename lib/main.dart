@@ -1,0 +1,324 @@
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const AngleDrawerApp());
+}
+
+class AngleDrawerApp extends StatelessWidget {
+  const AngleDrawerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Angle Drawer',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      home: const AngleDrawerScreen(),
+    );
+  }
+}
+
+class AngleDrawerScreen extends StatefulWidget {
+  const AngleDrawerScreen({super.key});
+
+  @override
+  State<AngleDrawerScreen> createState() => _AngleDrawerScreenState();
+}
+
+class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
+  final TextEditingController _controller = TextEditingController(text: '45');
+  double? _angle = 45.0;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _drawAngle() {
+    final input = _controller.text.trim();
+
+    // 1. Check for empty input
+    if (input.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter an angle in degrees.';
+        _angle = null;
+      });
+      return;
+    }
+
+    // 2. Parse decimal / integer number
+    final parsed = double.tryParse(input);
+
+    if (parsed == null) {
+      setState(() {
+        _errorMessage = 'Invalid input. Enter a number between 0 and 360.';
+        _angle = null;
+      });
+      return;
+    }
+
+    // 3. Validate angle range
+    if (parsed < 0 || parsed > 360) {
+      setState(() {
+        _errorMessage = 'Please enter an angle between 0° and 360°.';
+        _angle = null;
+      });
+      return;
+    }
+
+    // Input is valid
+    setState(() {
+      _errorMessage = null;
+      _angle = parsed;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Angle Maker'),
+        centerTitle: true,
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Input section card
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _controller,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: false,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Angle in degrees (°)',
+                        hintText: 'e.g., 45, 90, 135.5',
+                        errorText: _errorMessage,
+                        border: const OutlineInputBorder(),
+                        suffixIcon: const Icon(Icons.architecture),
+                      ),
+                      onSubmitted: (_) => _drawAngle(),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _drawAngle,
+                        icon: const Icon(Icons.draw),
+                        label: const Text(
+                          'Draw Angle',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Angle drawing canvas
+            Expanded(
+              child: Card(
+                elevation: 2,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16.0),
+                  child: _angle == null
+                      ? Center(
+                          child: Text(
+                            'Enter a valid angle above and tap "Draw Angle".',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            Text(
+                              'Angle: ${_formatAngle(_angle!)}°',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.deepPurple,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: Center(
+                                child: CustomPaint(
+                                  size: const Size(double.infinity, double.infinity),
+                                  painter: AnglePainter(angleInDegrees: _angle!),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatAngle(double angle) {
+    if (angle == angle.truncateToDouble()) {
+      return angle.toInt().toString();
+    }
+    return angle.toStringAsFixed(2);
+  }
+}
+
+/// Custom Painter to draw rays, vertex point, arc, and degree label
+class AnglePainter extends CustomPainter {
+  final double angleInDegrees;
+
+  AnglePainter({required this.angleInDegrees});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+
+    // Calculate maximum ray length based on available screen space
+    final maxRadius = math.min(size.width, size.height) / 2;
+    final rayLength = maxRadius * 0.75;
+
+    // Drawing paints
+    final rayPaint = Paint()
+      ..color = Colors.indigo
+      ..strokeWidth = 3.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final arcPaint = Paint()
+      ..color = Colors.deepOrange
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+
+    final arcFillPaint = Paint()
+      ..color = Colors.deepOrange.withValues(alpha: 0.12)
+      ..style = PaintingStyle.fill;
+
+    final vertexPaint = Paint()
+      ..color = Colors.indigo.shade900
+      ..style = PaintingStyle.fill;
+
+    // Convert degrees to radians (Trigonometry requirement)
+    final angleInRadians = angleInDegrees * (math.pi / 180.0);
+
+    // Ray 1: Base ray pointing horizontally to the right (0°)
+    final ray1End = Offset(center.dx + rayLength, center.dy);
+
+    // Ray 2: Rotated ray (-Y direction in Flutter screen coordinates)
+    final ray2End = Offset(
+      center.dx + rayLength * math.cos(angleInRadians),
+      center.dy - rayLength * math.sin(angleInRadians),
+    );
+
+    // Arc radius
+    final arcRadius = math.max(30.0, rayLength * 0.4);
+    final arcRect = Rect.fromCircle(center: center, radius: arcRadius);
+
+    // Sweep angle is negative because counter-clockwise goes up (-Y) in Flutter coordinates
+    final sweepAngle = -angleInRadians;
+
+    // Draw shaded wedge and arc for the angle
+    if (angleInDegrees > 0) {
+      final path = Path()
+        ..moveTo(center.dx, center.dy)
+        ..arcTo(arcRect, 0, sweepAngle, false)
+        ..close();
+      canvas.drawPath(path, arcFillPaint);
+
+      canvas.drawArc(arcRect, 0, sweepAngle, false, arcPaint);
+    }
+
+    // Draw Ray 1 & Ray 2 with arrowheads
+    canvas.drawLine(center, ray1End, rayPaint);
+    _drawArrowHead(canvas, center, ray1End, rayPaint);
+
+    canvas.drawLine(center, ray2End, rayPaint);
+    _drawArrowHead(canvas, center, ray2End, rayPaint);
+
+    // Draw vertex point at origin
+    canvas.drawCircle(center, 5.0, vertexPaint);
+
+    // Draw degree text label near the arc
+    if (angleInDegrees > 0) {
+      _drawAngleLabel(canvas, center, arcRadius, angleInRadians);
+    }
+  }
+
+  void _drawArrowHead(Canvas canvas, Offset start, Offset end, Paint paint) {
+    const arrowSize = 12.0;
+    final angle = math.atan2(end.dy - start.dy, end.dx - start.dx);
+
+    final path = Path();
+    path.moveTo(end.dx, end.dy);
+    path.lineTo(
+      end.dx - arrowSize * math.cos(angle - math.pi / 6),
+      end.dy - arrowSize * math.sin(angle - math.pi / 6),
+    );
+    path.moveTo(end.dx, end.dy);
+    path.lineTo(
+      end.dx - arrowSize * math.cos(angle + math.pi / 6),
+      end.dy - arrowSize * math.sin(angle + math.pi / 6),
+    );
+
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawAngleLabel(Canvas canvas, Offset center, double arcRadius, double angleInRadians) {
+    final labelText = angleInDegrees == angleInDegrees.truncateToDouble()
+        ? '${angleInDegrees.toInt()}°'
+        : '${angleInDegrees.toStringAsFixed(1)}°';
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: labelText,
+        style: TextStyle(
+          color: Colors.deepOrange.shade900,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+
+    // Position label along the midpoint of the arc
+    final midAngle = -angleInRadians / 2;
+    final labelDistance = arcRadius + 20;
+    final labelX = center.dx + labelDistance * math.cos(midAngle) - (textPainter.width / 2);
+    final labelY = center.dy + labelDistance * math.sin(midAngle) - (textPainter.height / 2);
+
+    textPainter.paint(canvas, Offset(labelX, labelY));
+  }
+
+  @override
+  bool shouldRepaint(covariant AnglePainter oldDelegate) {
+    return oldDelegate.angleInDegrees != angleInDegrees;
+  }
+}
