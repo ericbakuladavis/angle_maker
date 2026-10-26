@@ -80,9 +80,8 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     if (_angle == null) return;
 
     final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
-    const defaultHandleRadius = 14.0;
     final maxRadius = math.min(canvasSize.width, canvasSize.height) / 2;
-    final rayLength = math.max(10.0, maxRadius - defaultHandleRadius - 6.0);
+    final rayLength = math.max(10.0, maxRadius - 18.0);
 
     final angleInRadians = _angle! * (math.pi / 180.0);
     final handlePosition = Offset(
@@ -90,13 +89,15 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       center.dy - rayLength * math.sin(angleInRadians),
     );
 
-    // Only enable dragging if the tap is within 36 pixels of the tip handle circle
+    // Enable dragging if tap is within 36 pixels of the tip handle circle
     final distance = (touchPosition - handlePosition).distance;
     if (distance <= 36.0) {
       _isDraggingHandle = true;
       _updateAngleFromTouch(touchPosition, canvasSize);
     } else {
       _isDraggingHandle = false;
+      // Dismiss soft keyboard when tapping canvas outside the handle
+      FocusScope.of(context).unfocus();
     }
   }
 
@@ -143,135 +144,120 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Determine canvas height based on screen width so opening the keyboard won't shrink the canvas
-    final screenWidth = MediaQuery.of(context).size.width - 32.0;
-    final canvasHeight = math.min(screenWidth, 380.0);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Angle Maker'),
-        centerTitle: true,
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Canvas Display Card
-            SizedBox(
-              height: canvasHeight,
-              width: double.infinity,
-              child: Card(
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: _angle == null
-                      ? Center(
-                          child: Text(
-                            'Enter a valid angle below (0° – 360°).',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey.shade600,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      : Column(
-                          children: [
-                            Text(
-                              'Angle: ${_formatAngle(_angle!)}°',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.deepPurple,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Expanded(
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final canvasSize = Size(
-                                    constraints.maxWidth,
-                                    constraints.maxHeight,
-                                  );
-                                  return GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onPanStart: (details) => _handleTouchStart(
-                                      details.localPosition,
-                                      canvasSize,
-                                    ),
-                                    onPanUpdate: (details) => _handleTouchUpdate(
-                                      details.localPosition,
-                                      canvasSize,
-                                    ),
-                                    onPanEnd: (_) => _handleTouchEnd(),
-                                    onPanCancel: () => _handleTouchEnd(),
-                                    onTapDown: (details) => _handleTouchStart(
-                                      details.localPosition,
-                                      canvasSize,
-                                    ),
-                                    onTapUp: (_) => _handleTouchEnd(),
-                                    child: CustomPaint(
-                                      size: canvasSize,
-                                      painter: AnglePainter(
-                                        angleInDegrees: _angle!,
-                                        isDragging: _isDraggingHandle,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
+    return GestureDetector(
+      // Dismiss keyboard when tapping anywhere outside the input field
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 46.0,
+          titleSpacing: 16.0,
+          centerTitle: false,
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Angle Maker',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Instruction Banner
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.touch_app, size: 18, color: Colors.indigo.shade700),
-                const SizedBox(width: 6),
-                Text(
-                  'Tip: Drag the circle on the ray tip to change angle!',
+              Flexible(
+                child: Text(
+                  'Drag the circle or enter an angle.',
+                  textAlign: TextAlign.end,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 14,
                     fontWeight: FontWeight.w500,
                     color: Colors.indigo.shade700,
                   ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Real-time Input Section Card
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: TextField(
-                  controller: _controller,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                    signed: false,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Angle in degrees (°)',
-                    hintText: 'e.g., 45, 90, 135.5',
-                    errorText: _errorMessage,
-                    border: const OutlineInputBorder(),
-                    suffixIcon: const Icon(Icons.architecture),
-                  ),
-                  onChanged: _onInputChanged,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Canvas Display Area (Fills remaining height and scales automatically when keyboard opens)
+              Expanded(
+                child: _angle == null
+                    ? Center(
+                        child: Text(
+                          'Enter a valid angle below (0° – 360°).',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          final canvasSize = Size(
+                            constraints.maxWidth,
+                            constraints.maxHeight,
+                          );
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onPanStart: (details) => _handleTouchStart(
+                              details.localPosition,
+                              canvasSize,
+                            ),
+                            onPanUpdate: (details) => _handleTouchUpdate(
+                              details.localPosition,
+                              canvasSize,
+                            ),
+                            onPanEnd: (_) => _handleTouchEnd(),
+                            onPanCancel: () => _handleTouchEnd(),
+                            onTapDown: (details) => _handleTouchStart(
+                              details.localPosition,
+                              canvasSize,
+                            ),
+                            onTapUp: (_) => _handleTouchEnd(),
+                            child: CustomPaint(
+                              size: canvasSize,
+                              painter: AnglePainter(
+                                angleInDegrees: _angle!,
+                                isDragging: _isDraggingHandle,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Real-time Input Section Card
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
+                  child: TextField(
+                    controller: _controller,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: false,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Angle in degrees (°)',
+                      errorText: _errorMessage,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+                      suffixIcon: const Icon(Icons.architecture),
+                    ),
+                    onChanged: _onInputChanged,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -296,10 +282,10 @@ class AnglePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
 
-    // Expand handle slightly when actively dragged for visual feedback
+    // Calculate max radius based on current size (width & height), so drawing auto-scales smoothly
     final handleRadius = isDragging ? 16.0 : 14.0;
     final maxRadius = math.min(size.width, size.height) / 2;
-    final rayLength = math.max(10.0, maxRadius - 14.0 - 6.0);
+    final rayLength = math.max(10.0, maxRadius - 18.0);
 
     // Drawing paints
     final rayPaint = Paint()
