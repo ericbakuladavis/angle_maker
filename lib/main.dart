@@ -33,6 +33,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   final TextEditingController _controller = TextEditingController(text: '45');
   double? _angle = 45.0;
   String? _errorMessage;
+  bool _isDraggingHandle = false;
 
   @override
   void dispose() {
@@ -73,6 +74,44 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       _errorMessage = null;
       _angle = parsed;
     });
+  }
+
+  void _handleTouchStart(Offset touchPosition, Size canvasSize) {
+    if (_angle == null) return;
+
+    final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
+    const defaultHandleRadius = 14.0;
+    final maxRadius = math.min(canvasSize.width, canvasSize.height) / 2;
+    final rayLength = math.max(10.0, maxRadius - defaultHandleRadius - 6.0);
+
+    final angleInRadians = _angle! * (math.pi / 180.0);
+    final handlePosition = Offset(
+      center.dx + rayLength * math.cos(angleInRadians),
+      center.dy - rayLength * math.sin(angleInRadians),
+    );
+
+    // Only enable dragging if the tap is within 36 pixels of the tip handle circle
+    final distance = (touchPosition - handlePosition).distance;
+    if (distance <= 36.0) {
+      _isDraggingHandle = true;
+      _updateAngleFromTouch(touchPosition, canvasSize);
+    } else {
+      _isDraggingHandle = false;
+    }
+  }
+
+  void _handleTouchUpdate(Offset touchPosition, Size canvasSize) {
+    if (_isDraggingHandle) {
+      _updateAngleFromTouch(touchPosition, canvasSize);
+    }
+  }
+
+  void _handleTouchEnd() {
+    if (_isDraggingHandle) {
+      setState(() {
+        _isDraggingHandle = false;
+      });
+    }
   }
 
   void _updateAngleFromTouch(Offset touchPosition, Size canvasSize) {
@@ -119,7 +158,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Canvas Display Card (Fixed Size tied to Screen Width)
+            // Canvas Display Card
             SizedBox(
               height: canvasHeight,
               width: double.infinity,
@@ -157,21 +196,27 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                                   );
                                   return GestureDetector(
                                     behavior: HitTestBehavior.opaque,
-                                    onPanStart: (details) => _updateAngleFromTouch(
+                                    onPanStart: (details) => _handleTouchStart(
                                       details.localPosition,
                                       canvasSize,
                                     ),
-                                    onPanUpdate: (details) => _updateAngleFromTouch(
+                                    onPanUpdate: (details) => _handleTouchUpdate(
                                       details.localPosition,
                                       canvasSize,
                                     ),
-                                    onTapDown: (details) => _updateAngleFromTouch(
+                                    onPanEnd: (_) => _handleTouchEnd(),
+                                    onPanCancel: () => _handleTouchEnd(),
+                                    onTapDown: (details) => _handleTouchStart(
                                       details.localPosition,
                                       canvasSize,
                                     ),
+                                    onTapUp: (_) => _handleTouchEnd(),
                                     child: CustomPaint(
                                       size: canvasSize,
-                                      painter: AnglePainter(angleInDegrees: _angle!),
+                                      painter: AnglePainter(
+                                        angleInDegrees: _angle!,
+                                        isDragging: _isDraggingHandle,
+                                      ),
                                     ),
                                   );
                                 },
@@ -192,7 +237,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                 Icon(Icons.touch_app, size: 18, color: Colors.indigo.shade700),
                 const SizedBox(width: 6),
                 Text(
-                  'Tip: Type an angle or drag the circle.',
+                  'Tip: Drag the circle on the ray tip to change angle!',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -243,17 +288,18 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
 /// Custom Painter to draw extended rays, vertex, arc, and draggable handle
 class AnglePainter extends CustomPainter {
   final double angleInDegrees;
+  final bool isDragging;
 
-  AnglePainter({required this.angleInDegrees});
+  AnglePainter({required this.angleInDegrees, this.isDragging = false});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
 
-    // Extend rays close to the screen/canvas edge while keeping handle knob inside
-    const handleRadius = 14.0;
+    // Expand handle slightly when actively dragged for visual feedback
+    final handleRadius = isDragging ? 16.0 : 14.0;
     final maxRadius = math.min(size.width, size.height) / 2;
-    final rayLength = math.max(10.0, maxRadius - handleRadius - 6.0);
+    final rayLength = math.max(10.0, maxRadius - 14.0 - 6.0);
 
     // Drawing paints
     final rayPaint = Paint()
@@ -325,20 +371,20 @@ class AnglePainter extends CustomPainter {
   }
 
   void _drawDraggableHandle(Canvas canvas, Offset position, double radius) {
-    // Outer shadow
+    // Outer shadow (larger when dragging)
     canvas.drawCircle(
       position,
-      radius + 2.0,
+      radius + (isDragging ? 4.0 : 2.0),
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.15)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+        ..color = isDragging ? Colors.deepOrange.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
     );
 
-    // Outer ring (Indigo)
+    // Outer ring (Indigo or Deep Orange when dragging)
     canvas.drawCircle(
       position,
       radius,
-      Paint()..color = Colors.indigo.shade800,
+      Paint()..color = isDragging ? Colors.deepOrange.shade800 : Colors.indigo.shade800,
     );
 
     // Inner ring (White)
@@ -351,7 +397,7 @@ class AnglePainter extends CustomPainter {
     // Core accent dot (Deep Orange)
     canvas.drawCircle(
       position,
-      4.5,
+      isDragging ? 5.5 : 4.5,
       Paint()..color = Colors.deepOrange,
     );
   }
@@ -404,6 +450,7 @@ class AnglePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant AnglePainter oldDelegate) {
-    return oldDelegate.angleInDegrees != angleInDegrees;
+    return oldDelegate.angleInDegrees != angleInDegrees ||
+        oldDelegate.isDragging != isDragging;
   }
 }
