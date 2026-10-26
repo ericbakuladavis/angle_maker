@@ -40,8 +40,8 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     super.dispose();
   }
 
-  void _drawAngle() {
-    final input = _controller.text.trim();
+  void _onInputChanged(String text) {
+    final input = text.trim();
 
     if (input.isEmpty) {
       setState(() {
@@ -90,10 +90,15 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     double degrees = rad * (180.0 / math.pi);
     degrees = double.parse(degrees.toStringAsFixed(1));
 
+    final formatted = _formatAngle(degrees);
+
     setState(() {
       _angle = degrees;
       _errorMessage = null;
-      _controller.text = _formatAngle(degrees);
+      if (_controller.text != formatted) {
+        _controller.text = formatted;
+        _controller.selection = TextSelection.collapsed(offset: formatted.length);
+      }
     });
   }
 
@@ -110,44 +115,25 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Input Section Card
+            // Real-time Input Section Card
             Card(
               elevation: 2,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _controller,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                        signed: false,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Angle in degrees (°)',
-                        hintText: 'e.g., 45, 90, 135.5',
-                        errorText: _errorMessage,
-                        border: const OutlineInputBorder(),
-                        suffixIcon: const Icon(Icons.architecture),
-                      ),
-                      onSubmitted: (_) => _drawAngle(),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _drawAngle,
-                        icon: const Icon(Icons.draw),
-                        label: const Text(
-                          'Draw Angle',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
+                child: TextField(
+                  controller: _controller,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: false,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Angle in degrees (°)',
+                    hintText: 'e.g., 45, 90, 135.5',
+                    errorText: _errorMessage,
+                    border: const OutlineInputBorder(),
+                    suffixIcon: const Icon(Icons.architecture),
+                  ),
+                  onChanged: _onInputChanged,
                 ),
               ),
             ),
@@ -161,7 +147,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                 Icon(Icons.touch_app, size: 18, color: Colors.indigo.shade700),
                 const SizedBox(width: 6),
                 Text(
-                  'Tip: Drag the handle on the tip of the ray to change the angle!',
+                  'Tip: Type a number or drag the circle.',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -183,7 +169,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                   child: _angle == null
                       ? Center(
                           child: Text(
-                            'Enter a valid angle above and tap "Draw Angle".',
+                            'Enter a valid angle above (0° – 360°).',
                             style: TextStyle(
                               fontSize: 16,
                               color: Colors.grey.shade600,

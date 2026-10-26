@@ -8,7 +8,6 @@ void main() {
 
     // Verify that title and initial angle display exist.
     expect(find.text('Angle Maker'), findsWidgets);
-    expect(find.text('Draw Angle'), findsOneWidget);
     expect(find.text('Angle: 45°'), findsOneWidget);
   });
 }
