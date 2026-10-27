@@ -63,7 +63,7 @@ class AngleDrawerApp extends StatelessWidget {
       title: 'Angle Maker',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
         useMaterial3: true,
       ),
       home: const AngleDrawerScreen(),
@@ -86,6 +86,9 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   String? _errorMessage;
   bool _isDraggingHandle = false;
 
+  /// Control lock state (unlocked by default when app launches).
+  bool _isLocked = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -105,6 +108,8 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   }
 
   void _onInputChanged(String text) {
+    if (_isLocked) return;
+
     // Accept "4,5" as well as "4.5" (some phone keyboards show a comma).
     final input = text.trim().replaceAll(',', '.');
 
@@ -136,6 +141,11 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   // -------------------------------------------------------------------------
 
   void _handleTouchStart(Offset touchPosition, Size canvasSize) {
+    if (_isLocked) {
+      FocusScope.of(context).unfocus();
+      return;
+    }
+
     final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
     final handlePosition = pointOnCircle(
       center,
@@ -151,14 +161,12 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       _updateAngleFromTouch(touchPosition, canvasSize);
     } else {
       // Touching the canvas away from the handle dismisses the keyboard.
-      // (The canvas has its own tap handlers, so the screen-wide tap handler
-      // below never sees these touches. That's why this is needed here.)
       FocusScope.of(context).unfocus();
     }
   }
 
   void _handleTouchUpdate(Offset touchPosition, Size canvasSize) {
-    if (_isDraggingHandle) {
+    if (!_isLocked && _isDraggingHandle) {
       _updateAngleFromTouch(touchPosition, canvasSize);
     }
   }
@@ -170,6 +178,8 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   }
 
   void _updateAngleFromTouch(Offset touchPosition, Size canvasSize) {
+    if (_isLocked) return;
+
     final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
     final dx = touchPosition.dx - center.dx;
     final dy = touchPosition.dy - center.dy;
@@ -225,8 +235,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Drawing area: fills the remaining height and resizes
-              // automatically when the keyboard opens.
+              // Drawing area: fills remaining height and resizes automatically when keyboard opens.
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -250,6 +259,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                         painter: AnglePainter(
                           angleInDegrees: _angle,
                           isDragging: _isDraggingHandle,
+                          isLocked: _isLocked,
                           colors: colors,
                         ),
                       ),
@@ -260,10 +270,40 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
 
               const SizedBox(height: 8),
 
+              // Lock Button & Input Field
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Lock button positioned on the right side above the text input field
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton.filledTonal(
+                      onPressed: () {
+                        setState(() {
+                          _isLocked = !_isLocked;
+                          if (_isLocked) {
+                            _isDraggingHandle = false;
+                            FocusScope.of(context).unfocus();
+                          }
+                        });
+                      },
+                      icon: PadlockIcon(
+                        isLocked: _isLocked,
+                        size: 26,
+                        color: _isLocked ? colors.error : colors.primary,
+                      ),
+                      tooltip: _isLocked ? 'Unlock controls' : 'Lock controls',
+                      style: IconButton.styleFrom(
+                        padding: const EdgeInsets.all(10.0),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  // Text Input Field (disabled when locked)
                   TextField(
+                    enabled: !_isLocked,
                     controller: _controller,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -279,7 +319,10 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                     ),
                     onChanged: _onInputChanged,
                   ),
+
                   const SizedBox(height: 4),
+
+                  // Reserved space for error messages (prevents layout shift)
                   SizedBox(
                     height: 20.0,
                     child: Text(
@@ -303,18 +346,141 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
 }
 
 // ---------------------------------------------------------------------------
+// Custom Vector Padlock Icon
+// ---------------------------------------------------------------------------
+
+class PadlockIcon extends StatelessWidget {
+  final bool isLocked;
+  final double size;
+  final Color color;
+
+  const PadlockIcon({
+    super.key,
+    required this.isLocked,
+    this.size = 26.0,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size),
+      painter: _PadlockPainter(isLocked: isLocked, color: color),
+    );
+  }
+}
+
+class _PadlockPainter extends CustomPainter {
+  final bool isLocked;
+  final Color color;
+
+  _PadlockPainter({required this.isLocked, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bodyPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final shacklePaint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.13
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final bodyHeight = size.height * 0.50;
+    final bodyWidth = size.width * 0.82;
+    final bodyLeft = (size.width - bodyWidth) / 2;
+    final bodyTop = size.height - bodyHeight;
+
+    final bodyRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(bodyLeft, bodyTop, bodyWidth, bodyHeight),
+      const Radius.circular(3.0),
+    );
+
+    // 1. Draw Lock Body
+    canvas.drawRRect(bodyRect, bodyPaint);
+
+    // 2. Draw Keyhole
+    final keyholePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(
+      Offset(size.width / 2, bodyTop + bodyHeight * 0.40),
+      size.width * 0.08,
+      keyholePaint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(
+        size.width / 2 - (size.width * 0.04),
+        bodyTop + bodyHeight * 0.40,
+        size.width * 0.08,
+        bodyHeight * 0.32,
+      ),
+      keyholePaint,
+    );
+
+    // 3. Draw Shackle (Clasp)
+    final shacklePath = Path();
+    final shackleWidth = size.width * 0.46;
+    final shackleHeight = size.height * 0.44;
+
+    if (isLocked) {
+      // Closed Padlock
+      final leftX = size.width / 2 - shackleWidth / 2;
+      final rightX = size.width / 2 + shackleWidth / 2;
+      final topY = bodyTop - shackleHeight + (shackleWidth / 2);
+
+      shacklePath.moveTo(leftX, bodyTop + 2.0);
+      shacklePath.lineTo(leftX, topY);
+      shacklePath.addArc(
+        Rect.fromLTRB(leftX, bodyTop - shackleHeight, rightX, topY + (shackleWidth / 2)),
+        math.pi,
+        math.pi,
+      );
+      shacklePath.lineTo(rightX, bodyTop + 2.0);
+    } else {
+      // Open Padlock - Shackle centered over the lock body with a shortened right leg
+      final shackleLift = size.height * 0.18;
+      final leftX = bodyLeft + (bodyWidth - shackleWidth) / 2;
+      final rightX = leftX + shackleWidth;
+      final topY = bodyTop - shackleHeight - shackleLift;
+
+      shacklePath.moveTo(leftX, bodyTop + 2.0);
+      shacklePath.lineTo(leftX, topY + (shackleWidth / 2));
+      shacklePath.addArc(
+        Rect.fromLTRB(leftX, topY, rightX, topY + shackleWidth),
+        math.pi,
+        math.pi,
+      );
+      // Shortened right leg: includes a small vertical section below the arc
+      shacklePath.lineTo(rightX, topY + (shackleWidth * 0.65));
+    }
+
+    canvas.drawPath(shacklePath, shacklePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PadlockPainter oldDelegate) {
+    return oldDelegate.isLocked != isLocked || oldDelegate.color != color;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Painter: rays, vertex, arc, label, and the draggable handle
 // ---------------------------------------------------------------------------
 
 class AnglePainter extends CustomPainter {
   final double angleInDegrees;
   final bool isDragging;
+  final bool isLocked;
   final ColorScheme colors;
 
   AnglePainter({
     required this.angleInDegrees,
     required this.colors,
     this.isDragging = false,
+    this.isLocked = false,
   });
 
   @override
@@ -324,22 +490,22 @@ class AnglePainter extends CustomPainter {
     final radians = degreesToRadians(angleInDegrees);
 
     final rayPaint = Paint()
-      ..color = colors.primary
+      ..color = isLocked ? colors.outline : colors.primary
       ..strokeWidth = 3.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
     final arcPaint = Paint()
-      ..color = colors.tertiary
+      ..color = isLocked ? colors.outline : colors.tertiary
       ..strokeWidth = 2.5
       ..style = PaintingStyle.stroke;
 
     final arcFillPaint = Paint()
-      ..color = colors.tertiary.withValues(alpha: 0.12)
+      ..color = (isLocked ? colors.outline : colors.tertiary).withValues(alpha: 0.12)
       ..style = PaintingStyle.fill;
 
     final vertexPaint = Paint()
-      ..color = colors.onSurface
+      ..color = isLocked ? colors.outline : colors.onSurface
       ..style = PaintingStyle.fill;
 
     // Ray 1: horizontal, pointing right. Ray 2: rotated by the angle.
@@ -380,7 +546,7 @@ class AnglePainter extends CustomPainter {
   }
 
   void _drawDraggableHandle(Canvas canvas, Offset position, double radius) {
-    // Soft shadow / glow (stronger while dragging).
+    // Soft shadow / glow.
     canvas.drawCircle(
       position,
       radius + (isDragging ? 4.0 : 2.0),
@@ -395,7 +561,7 @@ class AnglePainter extends CustomPainter {
     canvas.drawCircle(
       position,
       radius,
-      Paint()..color = isDragging ? colors.tertiary : colors.primary,
+      Paint()..color = isLocked ? colors.outline : (isDragging ? colors.tertiary : colors.primary),
     );
 
     // Inner ring.
@@ -409,7 +575,7 @@ class AnglePainter extends CustomPainter {
     canvas.drawCircle(
       position,
       isDragging ? 5.5 : 4.5,
-      Paint()..color = colors.tertiary,
+      Paint()..color = isLocked ? colors.outline : colors.tertiary,
     );
   }
 
@@ -442,7 +608,7 @@ class AnglePainter extends CustomPainter {
       text: TextSpan(
         text: '${formatAngle(angleInDegrees)}°',
         style: TextStyle(
-          color: colors.tertiary,
+          color: isLocked ? colors.outline : colors.tertiary,
           fontSize: 14,
           fontWeight: FontWeight.bold,
         ),
@@ -462,6 +628,7 @@ class AnglePainter extends CustomPainter {
   bool shouldRepaint(covariant AnglePainter oldDelegate) {
     return oldDelegate.angleInDegrees != angleInDegrees ||
         oldDelegate.isDragging != isDragging ||
+        oldDelegate.isLocked != isLocked ||
         oldDelegate.colors != colors;
   }
 }
