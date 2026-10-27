@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 // ---------------------------------------------------------------------------
 
 /// Gap between the ray tips and the edge of the drawing area.
-const double kRayMargin = 18.0;
+const double kRayMargin = 10.0;
 const double kMinRayLength = 10.0;
 
 /// How close (in pixels) a touch must be to the handle to start a drag.
@@ -494,7 +494,7 @@ class _PadlockPainter extends CustomPainter {
         math.pi,
       );
       // Shortened right leg: includes a small vertical section below the arc
-      shacklePath.lineTo(rightX, topY + (shackleWidth * 0.65));
+      shacklePath.lineTo(rightX, topY + (shackleWidth * 0.85));
     }
 
     canvas.drawPath(shacklePath, shacklePaint);
