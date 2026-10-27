@@ -81,8 +81,7 @@ class AngleDrawerScreen extends StatefulWidget {
 class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   final TextEditingController _controller = TextEditingController(text: '45');
 
-  /// The angle being drawn. If the user types something invalid, this keeps
-  /// the last valid value so the drawing doesn't disappear while typing.
+  /// The angle being drawn. Invalid input resets it to 0°.
   double _angle = 45.0;
   String? _errorMessage;
   bool _isDraggingHandle = false;
@@ -97,33 +96,32 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   // Typing in the text field
   // -------------------------------------------------------------------------
 
+  /// Shows an error message under the field and resets the drawing to 0°.
+  void _showError(String message) {
+    setState(() {
+      _errorMessage = message;
+      _angle = 0.0;
+    });
+  }
+
   void _onInputChanged(String text) {
     // Accept "4,5" as well as "4.5" (some phone keyboards show a comma).
     final input = text.trim().replaceAll(',', '.');
 
     if (input.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter an angle in degrees.';
-        _angle = 0.0;
-      });
+      _showError('Please enter an angle in degrees.');
       return;
     }
 
     final parsed = double.tryParse(input);
 
     if (parsed == null || !parsed.isFinite) {
-      setState(() {
-        _errorMessage = 'Invalid input. Enter a number between 0 and 360.';
-        _angle = 0.0;
-      });
+      _showError('Invalid input. Enter a number between 0 and 360.');
       return;
     }
 
     if (parsed < 0 || parsed > kMaxAngle) {
-      setState(() {
-        _errorMessage = 'Please enter an angle between 0° and 360°.';
-        _angle = 0.0;
-      });
+      _showError('Please enter an angle between 0° and 360°.');
       return;
     }
 
@@ -304,6 +302,8 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                     height: 20.0,
                     child: Text(
                       _errorMessage ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: colors.error,
                         fontSize: 12.0,
