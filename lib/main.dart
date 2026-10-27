@@ -78,21 +78,53 @@ class AngleDrawerScreen extends StatefulWidget {
   State<AngleDrawerScreen> createState() => _AngleDrawerScreenState();
 }
 
-class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
+class _AngleDrawerScreenState extends State<AngleDrawerScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController(text: '45');
+  late final AnimationController _shakeController;
+  late final Animation<double> _shakeAnimation;
 
   /// The angle being drawn. Invalid input resets it to 0°.
   double _angle = 45.0;
   String? _errorMessage;
   bool _isDraggingHandle = false;
+  bool _isUpdatingFromTouch = false;
 
   /// Control lock state (unlocked by default when app launches).
   bool _isLocked = false;
 
   @override
+  void initState() {
+    super.initState();
+    _shakeController = AnimationController(
+      duration: const Duration(milliseconds: 350),
+      vsync: this,
+    );
+
+    // Horizontal shake sequence
+    _shakeAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: -6.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -6.0, end: 6.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 6.0, end: -4.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -4.0, end: 4.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 4.0, end: 0.0), weight: 1),
+    ]).animate(CurvedAnimation(
+      parent: _shakeController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
   void dispose() {
+    _shakeController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _triggerLockShake() {
+    if (_isLocked) {
+      _shakeController.forward(from: 0.0);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -108,7 +140,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   }
 
   void _onInputChanged(String text) {
-    if (_isLocked) return;
+    if (_isUpdatingFromTouch || _isLocked) return;
 
     // Accept "4,5" as well as "4.5" (some phone keyboards show a comma).
     final input = text.trim().replaceAll(',', '.');
@@ -141,11 +173,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   // -------------------------------------------------------------------------
 
   void _handleTouchStart(Offset touchPosition, Size canvasSize) {
-    if (_isLocked) {
-      FocusScope.of(context).unfocus();
-      return;
-    }
-
     final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
     final handlePosition = pointOnCircle(
       center,
@@ -153,9 +180,19 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       degreesToRadians(_angle),
     );
 
-    // Only start dragging if the touch lands on (or near) the handle.
+    // Calculate distance from touch to ray handle
     final distance = (touchPosition - handlePosition).distance;
-    _isDraggingHandle = distance <= kHandleHitRadius;
+    final isTouchOnHandle = distance <= kHandleHitRadius;
+
+    if (_isLocked) {
+      if (isTouchOnHandle) {
+        _triggerLockShake();
+      }
+      FocusScope.of(context).unfocus();
+      return;
+    }
+
+    _isDraggingHandle = isTouchOnHandle;
 
     if (_isDraggingHandle) {
       _updateAngleFromTouch(touchPosition, canvasSize);
@@ -194,8 +231,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     final degrees = double.parse((radians * 180.0 / math.pi).toStringAsFixed(1));
     final formatted = formatAngle(degrees);
 
-    // Updating the controller from code does NOT trigger onChanged,
-    // so the text field and the drawing stay in sync without any flags.
+    _isUpdatingFromTouch = true;
     if (_controller.text != formatted) {
       _controller.text = formatted;
       _controller.selection = TextSelection.collapsed(offset: formatted.length);
@@ -205,6 +241,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       _angle = degrees;
       _errorMessage = null;
     });
+    _isUpdatingFromTouch = false;
   }
 
   // -------------------------------------------------------------------------
@@ -245,15 +282,12 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                     );
                     return GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onPanStart: (details) =>
+                      onPanDown: (details) =>
                           _handleTouchStart(details.localPosition, canvasSize),
                       onPanUpdate: (details) =>
                           _handleTouchUpdate(details.localPosition, canvasSize),
                       onPanEnd: (_) => _handleTouchEnd(),
                       onPanCancel: _handleTouchEnd,
-                      onTapDown: (details) =>
-                          _handleTouchStart(details.localPosition, canvasSize),
-                      onTapUp: (_) => _handleTouchEnd(),
                       child: CustomPaint(
                         size: canvasSize,
                         painter: AnglePainter(
@@ -277,47 +311,60 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                   // Lock button positioned on the right side above the text input field
                   Align(
                     alignment: Alignment.centerRight,
-                    child: IconButton.filledTonal(
-                      onPressed: () {
-                        setState(() {
-                          _isLocked = !_isLocked;
-                          if (_isLocked) {
-                            _isDraggingHandle = false;
-                            FocusScope.of(context).unfocus();
-                          }
-                        });
+                    child: AnimatedBuilder(
+                      animation: _shakeAnimation,
+                      builder: (context, child) {
+                        return Transform.translate(
+                          offset: Offset(_shakeAnimation.value, 0),
+                          child: child,
+                        );
                       },
-                      icon: PadlockIcon(
-                        isLocked: _isLocked,
-                        size: 26,
-                        color: _isLocked ? colors.error : colors.primary,
-                      ),
-                      tooltip: _isLocked ? 'Unlock controls' : 'Lock controls',
-                      style: IconButton.styleFrom(
-                        padding: const EdgeInsets.all(10.0),
+                      child: IconButton.filledTonal(
+                        onPressed: () {
+                          setState(() {
+                            _isLocked = !_isLocked;
+                            if (_isLocked) {
+                              _isDraggingHandle = false;
+                              FocusScope.of(context).unfocus();
+                            }
+                          });
+                        },
+                        icon: PadlockIcon(
+                          isLocked: _isLocked,
+                          size: 26,
+                          color: _isLocked ? colors.error : colors.primary,
+                        ),
+                        tooltip: _isLocked ? 'Unlock controls' : 'Lock controls',
+                        style: IconButton.styleFrom(
+                          padding: const EdgeInsets.all(10.0),
+                        ),
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 4),
 
-                  // Text Input Field (disabled when locked)
-                  TextField(
-                    enabled: !_isLocked,
-                    controller: _controller,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                      signed: false,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Angle in degrees (°)',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 12.0,
-                        vertical: 12.0,
+                  // Text Input Field (triggers lock shake when tapped while locked)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _isLocked ? _triggerLockShake : null,
+                    child: TextField(
+                      enabled: !_isLocked,
+                      controller: _controller,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: false,
                       ),
+                      decoration: const InputDecoration(
+                        labelText: 'Angle in degrees (°)',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12.0,
+                          vertical: 12.0,
+                        ),
+                      ),
+                      onChanged: _onInputChanged,
                     ),
-                    onChanged: _onInputChanged,
                   ),
 
                   const SizedBox(height: 4),
