@@ -213,28 +213,11 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
         appBar: AppBar(
           toolbarHeight: 46.0,
           titleSpacing: 16.0,
-          centerTitle: false,
+          centerTitle: true,
           backgroundColor: colors.inversePrimary,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Angle Maker',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              Flexible(
-                child: Text(
-                  'Drag the circle or enter an angle',
-                  textAlign: TextAlign.end,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: colors.primary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          title: const Text(
+            'Angle Maker',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
         body: Padding(
@@ -293,7 +276,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                         horizontal: 12.0,
                         vertical: 12.0,
                       ),
-                      suffixIcon: Icon(Icons.architecture),
                     ),
                     onChanged: _onInputChanged,
                   ),
