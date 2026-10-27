@@ -537,8 +537,8 @@ class AnglePainter extends CustomPainter {
     final radians = degreesToRadians(angleInDegrees);
 
     final rayPaint = Paint()
-      ..color = isLocked ? colors.outline : colors.primary
-      ..strokeWidth = 3.5
+      ..color = isLocked ? colors.outline : colors.primary.withValues(alpha: 0.50)
+      ..strokeWidth = 3.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
@@ -651,24 +651,44 @@ class AnglePainter extends CustomPainter {
     double arcRadius,
     double radians,
   ) {
+    final labelText = '${formatAngle(angleInDegrees)}°';
+    final textColor = isLocked ? colors.outline : Colors.indigo.shade900;
+
+    // White outline halo for crystal-clear legibility over ray lines
+    final strokePainter = TextPainter(
+      text: TextSpan(
+        text: labelText,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+          foreground: Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 8
+            ..color = colors.surface,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
     final textPainter = TextPainter(
       text: TextSpan(
-        text: '${formatAngle(angleInDegrees)}°',
+        text: labelText,
         style: TextStyle(
-          color: isLocked ? colors.outline : colors.tertiary,
+          color: textColor,
           fontSize: 14,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w900,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
     // Place the label just outside the arc, halfway around it.
-    final labelCenter = pointOnCircle(center, arcRadius + 20, radians / 2);
-    textPainter.paint(
-      canvas,
-      labelCenter - Offset(textPainter.width / 2, textPainter.height / 2),
-    );
+    final labelCenter = pointOnCircle(center, arcRadius + 28, radians / 2);
+    final offset = labelCenter - Offset(textPainter.width / 2, textPainter.height / 2);
+
+    // Paint outline halo first, then dark text on top
+    strokePainter.paint(canvas, offset);
+    textPainter.paint(canvas, offset);
   }
 
   @override
