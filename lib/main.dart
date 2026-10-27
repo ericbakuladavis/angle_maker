@@ -88,7 +88,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen>
   double _angle = 45.0;
   String? _errorMessage;
   bool _isDraggingHandle = false;
-  bool _isUpdatingFromTouch = false;
 
   /// Control lock state (unlocked by default when app launches).
   bool _isLocked = false;
@@ -140,7 +139,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen>
   }
 
   void _onInputChanged(String text) {
-    if (_isUpdatingFromTouch || _isLocked) return;
+    if (_isLocked) return;
 
     // Accept "4,5" as well as "4.5" (some phone keyboards show a comma).
     final input = text.trim().replaceAll(',', '.');
@@ -188,7 +187,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen>
       if (isTouchOnHandle) {
         _triggerLockShake();
       }
-      FocusScope.of(context).unfocus();
       return;
     }
 
@@ -196,9 +194,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen>
 
     if (_isDraggingHandle) {
       _updateAngleFromTouch(touchPosition, canvasSize);
-    } else {
-      // Touching the canvas away from the handle dismisses the keyboard.
-      FocusScope.of(context).unfocus();
     }
   }
 
@@ -231,7 +226,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen>
     final degrees = double.parse((radians * 180.0 / math.pi).toStringAsFixed(1));
     final formatted = formatAngle(degrees);
 
-    _isUpdatingFromTouch = true;
     if (_controller.text != formatted) {
       _controller.text = formatted;
       _controller.selection = TextSelection.collapsed(offset: formatted.length);
@@ -241,7 +235,6 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen>
       _angle = degrees;
       _errorMessage = null;
     });
-    _isUpdatingFromTouch = false;
   }
 
   // -------------------------------------------------------------------------
@@ -652,7 +645,7 @@ class AnglePainter extends CustomPainter {
     double radians,
   ) {
     final labelText = '${formatAngle(angleInDegrees)}°';
-    final textColor = isLocked ? colors.outline : Colors.indigo.shade900;
+    final textColor = isLocked ? colors.outline : colors.tertiary;
 
     // White outline halo for crystal-clear legibility over ray lines
     final strokePainter = TextPainter(
