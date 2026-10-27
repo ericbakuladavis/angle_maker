@@ -102,7 +102,10 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     final input = text.trim().replaceAll(',', '.');
 
     if (input.isEmpty) {
-      setState(() => _errorMessage = 'Please enter an angle in degrees.');
+      setState(() {
+        _errorMessage = 'Please enter an angle in degrees.';
+        _angle = 0.0;
+      });
       return;
     }
 
@@ -111,6 +114,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     if (parsed == null || !parsed.isFinite) {
       setState(() {
         _errorMessage = 'Invalid input. Enter a number between 0 and 360.';
+        _angle = 0.0;
       });
       return;
     }
@@ -118,6 +122,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     if (parsed < 0 || parsed > kMaxAngle) {
       setState(() {
         _errorMessage = 'Please enter an angle between 0° and 360°.';
+        _angle = 0.0;
       });
       return;
     }
