@@ -221,7 +221,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
               ),
               Flexible(
                 child: Text(
-                  'Drag the circle or enter an angle.',
+                  'Drag the circle or enter an angle',
                   textAlign: TextAlign.end,
                   style: TextStyle(
                     fontSize: 14,
