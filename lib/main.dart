@@ -1,6 +1,55 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
+// ---------------------------------------------------------------------------
+// Constants and small helpers shared by the screen and the painter
+// ---------------------------------------------------------------------------
+
+/// Gap between the ray tips and the edge of the drawing area.
+const double kRayMargin = 18.0;
+const double kMinRayLength = 10.0;
+
+/// How close (in pixels) a touch must be to the handle to start a drag.
+const double kHandleHitRadius = 36.0;
+const double kHandleRadius = 14.0;
+const double kHandleRadiusDragging = 16.0;
+
+/// The arc is this fraction of the ray length, but never smaller than the min.
+const double kArcRadiusFraction = 0.35;
+const double kMinArcRadius = 30.0;
+
+const double kMaxAngle = 360.0;
+
+/// Length of both rays for a drawing area of the given size.
+/// Used by the painter AND the touch handling so they always agree.
+double rayLengthFor(Size size) {
+  return math.max(kMinRayLength, math.min(size.width, size.height) / 2 - kRayMargin);
+}
+
+/// A point on a circle, with angles measured counter-clockwise from the
+/// right (the way angles are drawn in math). Screen y points down, so we
+/// subtract the sin part.
+Offset pointOnCircle(Offset center, double radius, double radians) {
+  return Offset(
+    center.dx + radius * math.cos(radians),
+    center.dy - radius * math.sin(radians),
+  );
+}
+
+double degreesToRadians(double degrees) => degrees * (math.pi / 180.0);
+
+/// 45.0 -> "45", 42.57 -> "42.6"
+String formatAngle(double angle) {
+  if (angle == angle.truncateToDouble()) {
+    return angle.toInt().toString();
+  }
+  return angle.toStringAsFixed(1);
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
 void main() {
   runApp(const AngleDrawerApp());
 }
@@ -31,7 +80,10 @@ class AngleDrawerScreen extends StatefulWidget {
 
 class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
   final TextEditingController _controller = TextEditingController(text: '45');
-  double? _angle = 45.0;
+
+  /// The angle being drawn. If the user types something invalid, this keeps
+  /// the last valid value so the drawing doesn't disappear while typing.
+  double _angle = 45.0;
   String? _errorMessage;
   bool _isDraggingHandle = false;
 
@@ -41,31 +93,31 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     super.dispose();
   }
 
+  // -------------------------------------------------------------------------
+  // Typing in the text field
+  // -------------------------------------------------------------------------
+
   void _onInputChanged(String text) {
-    final input = text.trim();
+    // Accept "4,5" as well as "4.5" (some phone keyboards show a comma).
+    final input = text.trim().replaceAll(',', '.');
 
     if (input.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter an angle in degrees.';
-        _angle = null;
-      });
+      setState(() => _errorMessage = 'Please enter an angle in degrees.');
       return;
     }
 
     final parsed = double.tryParse(input);
 
-    if (parsed == null) {
+    if (parsed == null || !parsed.isFinite) {
       setState(() {
         _errorMessage = 'Invalid input. Enter a number between 0 and 360.';
-        _angle = null;
       });
       return;
     }
 
-    if (parsed < 0 || parsed > 360) {
+    if (parsed < 0 || parsed > kMaxAngle) {
       setState(() {
         _errorMessage = 'Please enter an angle between 0° and 360°.';
-        _angle = null;
       });
       return;
     }
@@ -76,27 +128,28 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     });
   }
 
+  // -------------------------------------------------------------------------
+  // Dragging the handle on the canvas
+  // -------------------------------------------------------------------------
+
   void _handleTouchStart(Offset touchPosition, Size canvasSize) {
-    if (_angle == null) return;
-
     final center = Offset(canvasSize.width / 2, canvasSize.height / 2);
-    final maxRadius = math.min(canvasSize.width, canvasSize.height) / 2;
-    final rayLength = math.max(10.0, maxRadius - 18.0);
-
-    final angleInRadians = _angle! * (math.pi / 180.0);
-    final handlePosition = Offset(
-      center.dx + rayLength * math.cos(angleInRadians),
-      center.dy - rayLength * math.sin(angleInRadians),
+    final handlePosition = pointOnCircle(
+      center,
+      rayLengthFor(canvasSize),
+      degreesToRadians(_angle),
     );
 
-    // Enable dragging if tap is within 36 pixels of the tip handle circle
+    // Only start dragging if the touch lands on (or near) the handle.
     final distance = (touchPosition - handlePosition).distance;
-    if (distance <= 36.0) {
-      _isDraggingHandle = true;
+    _isDraggingHandle = distance <= kHandleHitRadius;
+
+    if (_isDraggingHandle) {
       _updateAngleFromTouch(touchPosition, canvasSize);
     } else {
-      _isDraggingHandle = false;
-      // Dismiss soft keyboard when tapping canvas outside the handle
+      // Touching the canvas away from the handle dismisses the keyboard.
+      // (The canvas has its own tap handlers, so the screen-wide tap handler
+      // below never sees these touches. That's why this is needed here.)
       FocusScope.of(context).unfocus();
     }
   }
@@ -109,9 +162,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
 
   void _handleTouchEnd() {
     if (_isDraggingHandle) {
-      setState(() {
-        _isDraggingHandle = false;
-      });
+      setState(() => _isDraggingHandle = false);
     }
   }
 
@@ -120,32 +171,39 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
     final dx = touchPosition.dx - center.dx;
     final dy = touchPosition.dy - center.dy;
 
-    // Calculate angle in radians counter-clockwise from horizontal right (+X)
-    double rad = -math.atan2(dy, dx);
-    if (rad < 0) {
-      rad += 2 * math.pi;
+    // Angle counter-clockwise from the right, in the range 0 to 2*pi.
+    double radians = -math.atan2(dy, dx);
+    if (radians < 0) {
+      radians += 2 * math.pi;
     }
 
-    // Convert to degrees and round to 1 decimal place
-    double degrees = rad * (180.0 / math.pi);
-    degrees = double.parse(degrees.toStringAsFixed(1));
+    // Round to 1 decimal place.
+    final degrees = double.parse((radians * 180.0 / math.pi).toStringAsFixed(1));
+    final formatted = formatAngle(degrees);
 
-    final formatted = _formatAngle(degrees);
+    // Updating the controller from code does NOT trigger onChanged,
+    // so the text field and the drawing stay in sync without any flags.
+    if (_controller.text != formatted) {
+      _controller.text = formatted;
+      _controller.selection = TextSelection.collapsed(offset: formatted.length);
+    }
 
     setState(() {
       _angle = degrees;
       _errorMessage = null;
-      if (_controller.text != formatted) {
-        _controller.text = formatted;
-        _controller.selection = TextSelection.collapsed(offset: formatted.length);
-      }
     });
   }
 
+  // -------------------------------------------------------------------------
+  // UI
+  // -------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return GestureDetector(
-      // Dismiss keyboard when tapping anywhere outside the input field
+      // Tapping anywhere outside the text field dismisses the keyboard.
       onTap: () => FocusScope.of(context).unfocus(),
       behavior: HitTestBehavior.opaque,
       child: Scaffold(
@@ -153,16 +211,13 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
           toolbarHeight: 46.0,
           titleSpacing: 16.0,
           centerTitle: false,
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          backgroundColor: colors.inversePrimary,
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
                 'Angle Maker',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               Flexible(
                 child: Text(
@@ -171,7 +226,7 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: Colors.indigo.shade700,
+                    color: colors.primary,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -184,77 +239,73 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Canvas Display Area (Fills remaining height and scales automatically when keyboard opens)
+              // Drawing area: fills the remaining height and resizes
+              // automatically when the keyboard opens.
               Expanded(
-                child: _angle == null
-                    ? Center(
-                        child: Text(
-                          'Enter a valid angle below (0° – 360°).',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                          ),
-                          textAlign: TextAlign.center,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final canvasSize = Size(
+                      constraints.maxWidth,
+                      constraints.maxHeight,
+                    );
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onPanStart: (details) =>
+                          _handleTouchStart(details.localPosition, canvasSize),
+                      onPanUpdate: (details) =>
+                          _handleTouchUpdate(details.localPosition, canvasSize),
+                      onPanEnd: (_) => _handleTouchEnd(),
+                      onPanCancel: _handleTouchEnd,
+                      onTapDown: (details) =>
+                          _handleTouchStart(details.localPosition, canvasSize),
+                      onTapUp: (_) => _handleTouchEnd(),
+                      child: CustomPaint(
+                        size: canvasSize,
+                        painter: AnglePainter(
+                          angleInDegrees: _angle,
+                          isDragging: _isDraggingHandle,
+                          colors: colors,
                         ),
-                      )
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          final canvasSize = Size(
-                            constraints.maxWidth,
-                            constraints.maxHeight,
-                          );
-                          return GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onPanStart: (details) => _handleTouchStart(
-                              details.localPosition,
-                              canvasSize,
-                            ),
-                            onPanUpdate: (details) => _handleTouchUpdate(
-                              details.localPosition,
-                              canvasSize,
-                            ),
-                            onPanEnd: (_) => _handleTouchEnd(),
-                            onPanCancel: () => _handleTouchEnd(),
-                            onTapDown: (details) => _handleTouchStart(
-                              details.localPosition,
-                              canvasSize,
-                            ),
-                            onTapUp: (_) => _handleTouchEnd(),
-                            child: CustomPaint(
-                              size: canvasSize,
-                              painter: AnglePainter(
-                                angleInDegrees: _angle!,
-                                isDragging: _isDraggingHandle,
-                              ),
-                            ),
-                          );
-                        },
                       ),
+                    );
+                  },
+                ),
               ),
 
               const SizedBox(height: 8),
 
-              // Real-time Input Section Card
-              Card(
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
-                  child: TextField(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
                     controller: _controller,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                       signed: false,
                     ),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Angle in degrees (°)',
-                      errorText: _errorMessage,
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
-                      suffixIcon: const Icon(Icons.architecture),
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12.0,
+                        vertical: 12.0,
+                      ),
+                      suffixIcon: Icon(Icons.architecture),
                     ),
                     onChanged: _onInputChanged,
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 20.0,
+                    child: Text(
+                      _errorMessage ?? '',
+                      style: TextStyle(
+                        color: colors.error,
+                        fontSize: 12.0,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -262,129 +313,116 @@ class _AngleDrawerScreenState extends State<AngleDrawerScreen> {
       ),
     );
   }
-
-  String _formatAngle(double angle) {
-    if (angle == angle.truncateToDouble()) {
-      return angle.toInt().toString();
-    }
-    return angle.toStringAsFixed(1);
-  }
 }
 
-/// Custom Painter to draw extended rays, vertex, arc, and draggable handle
+// ---------------------------------------------------------------------------
+// Painter: rays, vertex, arc, label, and the draggable handle
+// ---------------------------------------------------------------------------
+
 class AnglePainter extends CustomPainter {
   final double angleInDegrees;
   final bool isDragging;
+  final ColorScheme colors;
 
-  AnglePainter({required this.angleInDegrees, this.isDragging = false});
+  AnglePainter({
+    required this.angleInDegrees,
+    required this.colors,
+    this.isDragging = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
+    final rayLength = rayLengthFor(size);
+    final radians = degreesToRadians(angleInDegrees);
 
-    // Calculate max radius based on current size (width & height), so drawing auto-scales smoothly
-    final handleRadius = isDragging ? 16.0 : 14.0;
-    final maxRadius = math.min(size.width, size.height) / 2;
-    final rayLength = math.max(10.0, maxRadius - 18.0);
-
-    // Drawing paints
     final rayPaint = Paint()
-      ..color = Colors.indigo
+      ..color = colors.primary
       ..strokeWidth = 3.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
     final arcPaint = Paint()
-      ..color = Colors.deepOrange
+      ..color = colors.tertiary
       ..strokeWidth = 2.5
       ..style = PaintingStyle.stroke;
 
     final arcFillPaint = Paint()
-      ..color = Colors.deepOrange.withValues(alpha: 0.12)
+      ..color = colors.tertiary.withValues(alpha: 0.12)
       ..style = PaintingStyle.fill;
 
     final vertexPaint = Paint()
-      ..color = Colors.indigo.shade900
+      ..color = colors.onSurface
       ..style = PaintingStyle.fill;
 
-    // Convert degrees to radians
-    final angleInRadians = angleInDegrees * (math.pi / 180.0);
+    // Ray 1: horizontal, pointing right. Ray 2: rotated by the angle.
+    final ray1End = pointOnCircle(center, rayLength, 0);
+    final ray2End = pointOnCircle(center, rayLength, radians);
 
-    // Ray 1: Base horizontal ray to the right (0°)
-    final ray1End = Offset(center.dx + rayLength, center.dy);
-
-    // Ray 2: Rotated ray (-Y direction in Flutter screen coordinates)
-    final ray2End = Offset(
-      center.dx + rayLength * math.cos(angleInRadians),
-      center.dy - rayLength * math.sin(angleInRadians),
-    );
-
-    // Arc radius
-    final arcRadius = math.max(30.0, rayLength * 0.35);
+    // Arc between the rays. Negative sweep = counter-clockwise on screen.
+    final arcRadius = math.max(kMinArcRadius, rayLength * kArcRadiusFraction);
     final arcRect = Rect.fromCircle(center: center, radius: arcRadius);
+    final sweepAngle = -radians;
 
-    // Sweep angle
-    final sweepAngle = -angleInRadians;
-
-    // Draw shaded wedge and arc
     if (angleInDegrees > 0) {
-      final path = Path()
+      final wedge = Path()
         ..moveTo(center.dx, center.dy)
         ..arcTo(arcRect, 0, sweepAngle, false)
         ..close();
-      canvas.drawPath(path, arcFillPaint);
-
+      canvas.drawPath(wedge, arcFillPaint);
       canvas.drawArc(arcRect, 0, sweepAngle, false, arcPaint);
     }
 
-    // Draw Ray 1 & Ray 2
     canvas.drawLine(center, ray1End, rayPaint);
     _drawArrowHead(canvas, center, ray1End, rayPaint);
 
     canvas.drawLine(center, ray2End, rayPaint);
     _drawArrowHead(canvas, center, ray2End, rayPaint);
 
-    // Draw vertex point at origin
     canvas.drawCircle(center, 5.0, vertexPaint);
 
-    // Draw draggable handle at the tip of Ray 2
-    _drawDraggableHandle(canvas, ray2End, handleRadius);
+    _drawDraggableHandle(
+      canvas,
+      ray2End,
+      isDragging ? kHandleRadiusDragging : kHandleRadius,
+    );
 
-    // Draw degree text label near the arc
     if (angleInDegrees > 0) {
-      _drawAngleLabel(canvas, center, arcRadius, angleInRadians);
+      _drawAngleLabel(canvas, center, arcRadius, radians);
     }
   }
 
   void _drawDraggableHandle(Canvas canvas, Offset position, double radius) {
-    // Outer shadow (larger when dragging)
+    // Soft shadow / glow (stronger while dragging).
     canvas.drawCircle(
       position,
       radius + (isDragging ? 4.0 : 2.0),
       Paint()
-        ..color = isDragging ? Colors.deepOrange.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.15)
+        ..color = isDragging
+            ? colors.tertiary.withValues(alpha: 0.3)
+            : colors.shadow.withValues(alpha: 0.15)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
     );
 
-    // Outer ring (Indigo or Deep Orange when dragging)
+    // Outer ring.
     canvas.drawCircle(
       position,
       radius,
-      Paint()..color = isDragging ? Colors.deepOrange.shade800 : Colors.indigo.shade800,
+      Paint()..color = isDragging ? colors.tertiary : colors.primary,
     );
 
-    // Inner ring (White)
+    // Inner ring.
     canvas.drawCircle(
       position,
       radius - 3.5,
-      Paint()..color = Colors.white,
+      Paint()..color = colors.surface,
     );
 
-    // Core accent dot (Deep Orange)
+    // Core dot.
     canvas.drawCircle(
       position,
       isDragging ? 5.5 : 4.5,
-      Paint()..color = Colors.deepOrange,
+      Paint()..color = colors.tertiary,
     );
   }
 
@@ -392,51 +430,51 @@ class AnglePainter extends CustomPainter {
     const arrowSize = 12.0;
     final angle = math.atan2(end.dy - start.dy, end.dx - start.dx);
 
-    final path = Path();
-    path.moveTo(end.dx, end.dy);
-    path.lineTo(
-      end.dx - arrowSize * math.cos(angle - math.pi / 6),
-      end.dy - arrowSize * math.sin(angle - math.pi / 6),
-    );
-    path.moveTo(end.dx, end.dy);
-    path.lineTo(
-      end.dx - arrowSize * math.cos(angle + math.pi / 6),
-      end.dy - arrowSize * math.sin(angle + math.pi / 6),
-    );
+    final path = Path()
+      ..moveTo(end.dx, end.dy)
+      ..lineTo(
+        end.dx - arrowSize * math.cos(angle - math.pi / 6),
+        end.dy - arrowSize * math.sin(angle - math.pi / 6),
+      )
+      ..moveTo(end.dx, end.dy)
+      ..lineTo(
+        end.dx - arrowSize * math.cos(angle + math.pi / 6),
+        end.dy - arrowSize * math.sin(angle + math.pi / 6),
+      );
 
     canvas.drawPath(path, paint);
   }
 
-  void _drawAngleLabel(Canvas canvas, Offset center, double arcRadius, double angleInRadians) {
-    final labelText = angleInDegrees == angleInDegrees.truncateToDouble()
-        ? '${angleInDegrees.toInt()}°'
-        : '${angleInDegrees.toStringAsFixed(1)}°';
-
+  void _drawAngleLabel(
+    Canvas canvas,
+    Offset center,
+    double arcRadius,
+    double radians,
+  ) {
     final textPainter = TextPainter(
       text: TextSpan(
-        text: labelText,
+        text: '${formatAngle(angleInDegrees)}°',
         style: TextStyle(
-          color: Colors.deepOrange.shade900,
+          color: colors.tertiary,
           fontSize: 14,
           fontWeight: FontWeight.bold,
         ),
       ),
       textDirection: TextDirection.ltr,
+    )..layout();
+
+    // Place the label just outside the arc, halfway around it.
+    final labelCenter = pointOnCircle(center, arcRadius + 20, radians / 2);
+    textPainter.paint(
+      canvas,
+      labelCenter - Offset(textPainter.width / 2, textPainter.height / 2),
     );
-    textPainter.layout();
-
-    // Position label along the midpoint of the arc
-    final midAngle = -angleInRadians / 2;
-    final labelDistance = arcRadius + 20;
-    final labelX = center.dx + labelDistance * math.cos(midAngle) - (textPainter.width / 2);
-    final labelY = center.dy + labelDistance * math.sin(midAngle) - (textPainter.height / 2);
-
-    textPainter.paint(canvas, Offset(labelX, labelY));
   }
 
   @override
   bool shouldRepaint(covariant AnglePainter oldDelegate) {
     return oldDelegate.angleInDegrees != angleInDegrees ||
-        oldDelegate.isDragging != isDragging;
+        oldDelegate.isDragging != isDragging ||
+        oldDelegate.colors != colors;
   }
 }
