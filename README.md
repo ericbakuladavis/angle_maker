@@ -8,6 +8,8 @@ Tested on Android. I don't know how to make it work on iOS.
 
 ## Screenshots
 
+![Default View](screenshots/default-view.png)
+![Angle Input View](screenshots/angle-input-view.png)
 
 ## Technology
 
