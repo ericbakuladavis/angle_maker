@@ -2,7 +2,7 @@
 
 A mobile app built with Flutter and Dart.
 
-Specify and angle and the app will draw it. Manually make an angle and the app will measure it. 
+Specify an angle and the app will draw it. Manually make an angle and the app will measure it. 
 
 Tested on Android. I don't know how to make it work on iOS.
 
