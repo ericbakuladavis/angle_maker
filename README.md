@@ -1,17 +1,24 @@
-# angle_maker
+# Angle Maker
 
-Draw angles
+A mobile app built with Flutter and Dart.
 
-## Getting Started
+Specify and angle and the app will draw it. Manually make an angle and the app will measure it. 
 
-This project is a starting point for a Flutter application.
+Tested on Android. I don't know how to make it work on iOS.
 
-A few resources to get you started if this is your first Flutter project:
+## Screenshots
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Technology
+
+- **Flutter** — app framework and user interface
+- **Dart** — programming language
+- **Android Studio** — development environment
+
+## License
+
+This project is distributed under the terms described in the [`LICENSE`](LICENSE) file.
+
+I'd like others to use and modify it, as long as it's not redistributed with ads.
+
+Please read the [`LICENSE`](LICENSE) file before copying, modifying, or redistributing the source code.
