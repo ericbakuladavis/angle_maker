@@ -7,11 +7,9 @@ Specify and angle and the app will draw it. Manually make an angle and the app w
 Tested on Android. I don't know how to make it work on iOS.
 
 ## Screenshots
+
 <img src="screenshots/default-view.png" width="300" />
 <img src="screenshots/angle-input-view.png" width="300" />
-
-![Default View](screenshots/default-view.png)
-![Angle Input View](screenshots/angle-input-view.png)
 
 ## Technology
 
