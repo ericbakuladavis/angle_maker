@@ -11,12 +11,6 @@ Tested on Android. I don't know how to make it work on iOS.
 <img src="screenshots/default-view.png" width="300" />
 <img src="screenshots/angle-input-view.png" width="300" />
 
-## Technology
-
-- **Flutter** — app framework and user interface
-- **Dart** — programming language
-- **Android Studio** — development environment
-
 ## License
 
 This project is distributed under the terms described in the [`LICENSE`](LICENSE) file.
