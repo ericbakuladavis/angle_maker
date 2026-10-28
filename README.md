@@ -2,7 +2,7 @@
 
 A mobile app built with Flutter and Dart.
 
-Specify an angle and the app will draw it. Manually make an angle and the app will measure it. 
+Specify an angle and the app will draw it. Manually adjust the angle and the app will measure it. 
 
 Tested on Android. I don't know how to make it work on iOS.
 
@@ -11,10 +11,14 @@ Tested on Android. I don't know how to make it work on iOS.
 <img src="screenshots/default-view.png" width="300" />
 <img src="screenshots/angle-input-view.png" width="300" />
 
+## Using the App
+
+- Tap and drag the circle on the end of the line to move that line and adjust the angle.
+- Enter a value between 0 and 360 in the text field to set the angle.
+- Tap the lock button to disable inputs until the lock button is tapped again.
+
 ## License
 
 This project is distributed under the terms described in the [`LICENSE`](LICENSE) file.
 
-I'd like others to use and modify it, as long as it's not redistributed with ads.
-
-Please read the [`LICENSE`](LICENSE) file before copying, modifying, or redistributing the source code.
+My intention is that others may use and modify it, as long as it's not redistributed with ads.
