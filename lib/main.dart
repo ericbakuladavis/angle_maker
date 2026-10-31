@@ -117,6 +117,11 @@ class _ProtractorPageState extends State<ProtractorPage>
   }
 
   void _onTextChanged(String s) {
+    // Empty field (or just a ".") means 0 degrees.
+    if (s.isEmpty || s == '.') {
+      setState(() => _angle = 0);
+      return;
+    }
     final v = double.tryParse(s);
     if (v == null) return;
     if (v > 360) {
