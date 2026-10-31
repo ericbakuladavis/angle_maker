@@ -25,6 +25,14 @@ class ProtractorApp extends StatelessWidget {
 const double kHandleRadius = 16;
 const double kHitRadius = 40;
 
+/// Formats an angle with up to 2 decimals, dropping trailing zeros.
+String formatAngle(double v) {
+  var s = v.toStringAsFixed(2);
+  s = s.replaceFirst(RegExp(r'0+$'), '');
+  s = s.replaceFirst(RegExp(r'\.$'), '');
+  return s;
+}
+
 /// Point where a ray at [deg] (0 = up, clockwise) meets the edge of [size],
 /// inset so the whole handle circle stays visible.
 Offset handlePosition(Size size, double deg) {
@@ -55,7 +63,8 @@ class ProtractorPage extends StatefulWidget {
   State<ProtractorPage> createState() => _ProtractorPageState();
 }
 
-class _ProtractorPageState extends State<ProtractorPage> {
+class _ProtractorPageState extends State<ProtractorPage>
+    with SingleTickerProviderStateMixin {
   double _start = 0; // direction of ray 1 in degrees (0 = straight up)
   double _angle = 45; // clockwise angle from ray 1 to ray 2
   bool _locked = false;
@@ -64,10 +73,15 @@ class _ProtractorPageState extends State<ProtractorPage> {
 
   final _controller = TextEditingController(text: '45');
   final _focus = FocusNode();
+  late final AnimationController _shake;
 
   @override
   void initState() {
     super.initState();
+    _shake = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
     _focus.addListener(() {
       // Tidy up the text (e.g. empty or "5.") when the field loses focus.
       if (!_focus.hasFocus) setState(_syncText);
@@ -76,18 +90,14 @@ class _ProtractorPageState extends State<ProtractorPage> {
 
   @override
   void dispose() {
+    _shake.dispose();
     _controller.dispose();
     _focus.dispose();
     super.dispose();
   }
 
-  String _fmt(double v) {
-    final s = v.toStringAsFixed(1);
-    return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
-  }
-
   void _syncText() {
-    final t = _fmt(_angle);
+    final t = formatAngle(_angle);
     _controller.value = TextEditingValue(
       text: t,
       selection: TextSelection.collapsed(offset: t.length),
@@ -95,6 +105,8 @@ class _ProtractorPageState extends State<ProtractorPage> {
   }
 
   double _norm(double x) => ((x * 10).round() / 10) % 360;
+
+  void _shakeLock() => _shake.forward(from: 0);
 
   void _toggleLock() {
     setState(() {
@@ -114,6 +126,17 @@ class _ProtractorPageState extends State<ProtractorPage> {
       });
     } else {
       setState(() => _angle = v);
+    }
+  }
+
+  // Shake the lock if a handle is touched while locked.
+  void _onCanvasPointerDown(PointerDownEvent e) {
+    if (!_locked) return;
+    final a = handlePosition(_size, _start);
+    final b = handlePosition(_size, _start + _angle);
+    if ((e.localPosition - a).distance <= kHitRadius ||
+        (e.localPosition - b).distance <= kHitRadius) {
+      _shakeLock();
     }
   }
 
@@ -171,12 +194,23 @@ class _ProtractorPageState extends State<ProtractorPage> {
                     ),
                   ),
                   const Spacer(),
-                  IconButton(
-                    tooltip: _locked ? 'Unlock' : 'Lock',
-                    onPressed: _toggleLock,
-                    icon: Icon(
-                      _locked ? Icons.lock : Icons.lock_open,
-                      color: _locked ? Colors.red : Colors.white,
+                  AnimatedBuilder(
+                    animation: _shake,
+                    builder: (context, child) {
+                      final t = _shake.value;
+                      final dx = math.sin(t * math.pi * 6) * 8 * (1 - t);
+                      return Transform.translate(
+                        offset: Offset(dx, 0),
+                        child: child,
+                      );
+                    },
+                    child: IconButton(
+                      tooltip: _locked ? 'Unlock' : 'Lock',
+                      onPressed: _toggleLock,
+                      icon: Icon(
+                        _locked ? Icons.lock : Icons.lock_open,
+                        color: _locked ? Colors.red : Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -187,43 +221,54 @@ class _ProtractorPageState extends State<ProtractorPage> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   _size = Size(constraints.maxWidth, constraints.maxHeight);
-                  return GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      if (!_locked) _focus.unfocus();
-                    },
-                    onPanStart: _onPanStart,
-                    onPanUpdate: _onPanUpdate,
-                    onPanEnd: (_) => _dragging = null,
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _ProtractorPainter(_start, _angle, _locked),
+                  return Listener(
+                    onPointerDown: _onCanvasPointerDown,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        if (!_locked) _focus.unfocus();
+                      },
+                      onPanStart: _onPanStart,
+                      onPanUpdate: _onPanUpdate,
+                      onPanEnd: (_) => _dragging = null,
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: _ProtractorPainter(_start, _angle, _locked),
+                      ),
                     ),
                   );
                 },
               ),
             ),
-            // Text input
+            // Text input (touching it while locked shakes the lock)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: TextField(
-                controller: _controller,
-                focusNode: _focus,
-                enabled: !_locked,
-                keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(
-                      RegExp(r'^\d{0,3}\.?\d{0,2}')),
-                ],
-                onChanged: _onTextChanged,
-                style: const TextStyle(fontSize: 18, color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Angle (0–360)',
-                  suffixText: '°',
-                  filled: true,
-                  fillColor: Color(0xFF1A1A1A),
-                  border: OutlineInputBorder(),
+              child: Listener(
+                onPointerDown: (_) {
+                  if (_locked) _shakeLock();
+                },
+                child: AbsorbPointer(
+                  absorbing: _locked,
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focus,
+                    enabled: !_locked,
+                    keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d{0,3}\.?\d{0,2}')),
+                    ],
+                    onChanged: _onTextChanged,
+                    style: const TextStyle(fontSize: 18, color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Angle (0–360)',
+                      suffixText: '°',
+                      filled: true,
+                      fillColor: Color(0xFF1A1A1A),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -249,7 +294,7 @@ class _ProtractorPainter extends CustomPainter {
     final b = handlePosition(size, start + angle);
 
     // Arc between the rays
-    final arcR = (math.min(size.width, size.height) * 0.15).clamp(24.0, 90.0);
+    final arcR = (math.min(size.width, size.height) * 0.15).clamp(24.0, 70.0);
     final arcRect = Rect.fromCircle(center: c, radius: arcR);
     final startRad = -math.pi / 2 + start * math.pi / 180;
     final sweepRad = angle * math.pi / 180;
@@ -292,6 +337,68 @@ class _ProtractorPainter extends CustomPainter {
       canvas.drawCircle(p, kHandleRadius, fill);
       canvas.drawCircle(p, kHandleRadius - 1.5, border);
     }
+
+    // Angle label, just outside the midpoint of the arc
+    _paintLabel(canvas, size, c, arcR);
+  }
+
+  void _paintLabel(Canvas canvas, Size size, Offset c, double arcR) {
+    final text = '${formatAngle(angle)}°';
+    const fontSize = 16.0;
+
+    final halo = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.bold,
+          foreground: Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 4
+            ..strokeJoin = StrokeJoin.round
+            ..color = Colors.black,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final fill = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    // Direction of the arc's midpoint (0 = up, clockwise)
+    final midRad = (start + angle / 2) * math.pi / 180;
+    final dx = math.sin(midRad);
+    final dy = -math.cos(midRad);
+
+    // Distance from the text's center to its edge along that direction,
+    // so the whole label sits outside the arc with a small gap.
+    final halfW = fill.width / 2;
+    final halfH = fill.height / 2;
+    final tx = dx.abs() < 1e-9 ? double.infinity : halfW / dx.abs();
+    final ty = dy.abs() < 1e-9 ? double.infinity : halfH / dy.abs();
+    final reach = math.min(tx, ty);
+
+    final dist = arcR + 6 + reach;
+    var center = c + Offset(dx * dist, dy * dist);
+
+    // Keep the label inside the drawing area
+    center = Offset(
+      center.dx.clamp(halfW + 2, math.max(halfW + 2, size.width - halfW - 2)),
+      center.dy.clamp(halfH + 2, math.max(halfH + 2, size.height - halfH - 2)),
+    );
+
+    final topLeft = center - Offset(halfW, halfH);
+    halo.paint(canvas, topLeft);
+    fill.paint(canvas, topLeft);
   }
 
   @override
