@@ -19,7 +19,7 @@ Tested on Android. I don't know how to make it work on iOS.
 
 ## App Installation Overview
 
-This is just how did I it.
+This is just how I did it.
 
 1. Get Android Studio and install Flutter.
 2. I used AI to write the app, but you can use git to clone the project.
