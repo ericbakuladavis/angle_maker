@@ -13,7 +13,7 @@ Tested on Android. I don't know how to make it work on iOS.
 
 ## Using the App
 
-- Tap and drag the circle on the end of the line to move that line and adjust the angle.
+- Tap and drag a circle on the end of a line to move that line and adjust the angle.
 - Enter a value between 0 and 360 in the text field to set the angle.
 - Tap the lock button to disable inputs until the lock button is tapped again.
 
